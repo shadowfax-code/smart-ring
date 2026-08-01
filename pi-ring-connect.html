@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06110F">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Pi Ring</title>
+<link rel="icon" href="data:,">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{--ground:#06110F;--surface:#0D1A19;--raised:#152525;--line:#213534;
+  --aqua:#5FE0C6;--iris:#8E9CFF;--ice:#7FC4FF;--text:#E6F2F0;--muted:#6E8A88;
+  --warn:#FFB86B;--bad:#FF7A85}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0 auto;max-width:520px;background:var(--ground);color:var(--text);
+  font-family:'Public Sans',system-ui,sans-serif;padding:22px 16px 70px;
+  -webkit-font-smoothing:antialiased}
+h1{font-family:'Bricolage Grotesque',sans-serif;font-size:31px;font-weight:800;
+  letter-spacing:-.02em;margin:0 0 6px}
+.sub{color:var(--muted);font-size:14px;line-height:1.55;margin:0 0 20px}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted)}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+button{font-family:inherit;cursor:pointer;border:none;
+  transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s,opacity .2s}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.35;cursor:default}
+button:focus-visible{outline:2px solid var(--aqua);outline-offset:3px}
+.primary{width:100%;padding:17px;border-radius:16px;background:var(--aqua);
+  color:var(--ground);font-size:16px;font-weight:600}
+.ghost{padding:12px 14px;border-radius:13px;background:var(--raised);
+  border:1px solid var(--line);color:var(--text);font-size:13.5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  padding:16px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.big{font-family:'Bricolage Grotesque',sans-serif;font-size:38px;font-weight:800;
+  line-height:1;margin-top:8px}
+.status{display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:16px}
+.dot{width:9px;height:9px;border-radius:9px;background:var(--muted);flex-shrink:0}
+.dot.on{background:var(--aqua)}
+.dot.busy{background:var(--warn);animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:.3}50%{opacity:1}}
+#log{background:#030A09;border:1px solid var(--line);border-radius:14px;padding:11px;
+  max-height:300px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;
+  font-size:11px;line-height:1.6}
+.le{padding:2px 0;border-bottom:1px solid rgba(33,53,52,.35);word-break:break-all}
+.in{color:var(--aqua)}.out{color:var(--warn)}.sys{color:var(--muted)}.err{color:var(--bad)}
+.box{border-radius:14px;padding:14px;font-size:13.5px;line-height:1.55;margin-bottom:16px}
+.box.w{background:var(--raised);border:1px solid var(--warn);color:var(--warn)}
+.box.g{background:var(--raised);border:1px solid var(--aqua);color:var(--aqua)}
+.hide{display:none}
+svg{display:block;width:100%;height:80px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<h1>Pi Ring</h1>
+<p class="sub">Talks to the ring directly over Bluetooth using the open Colmi R02-family protocol. No account, no cloud, nothing leaves your phone.</p>
+
+<div id="warn" class="box w hide"></div>
+<div id="found" class="box g hide"></div>
+
+<div class="status">
+  <span class="dot" id="dot"></span><span id="stat">Not connected</span>
+</div>
+
+<button class="primary" id="connect">Connect ring</button>
+
+<div id="app" class="hide">
+
+  <div class="grid" style="margin-top:16px">
+    <div class="card" style="margin:0">
+      <div class="eyebrow">Battery</div>
+      <div class="big mono" id="batt" style="color:var(--aqua)">—</div>
+    </div>
+    <div class="card" style="margin:0">
+      <div class="eyebrow">Live heart rate</div>
+      <div class="big mono" id="hr" style="color:var(--iris)">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Live trace</div>
+    <svg id="trace" viewBox="0 0 300 80" preserveAspectRatio="none">
+      <path id="tracePath" fill="none" stroke="#8E9CFF" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="hrStart">Start live HR</button>
+      <button class="ghost" id="hrStop">Stop</button>
+      <button class="ghost" id="spo2">Live SpO₂</button>
+    </div>
+    <p class="sub" style="margin:12px 0 0;font-size:12.5px">
+      Keep the ring snug and your hand still. The first reading takes 10–20 seconds.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Pull stored data</div>
+    <p class="sub" style="margin:8px 0 12px;font-size:12.5px">
+      These request today's recorded history. Responses land in the log as raw bytes —
+      send them to me and I'll write the decoders for your firmware version.
+    </p>
+    <div class="row">
+      <button class="ghost" data-cmd="43" data-arg="today">Steps</button>
+      <button class="ghost" data-cmd="15" data-arg="today">Heart rate log</button>
+      <button class="ghost" data-cmd="44" data-arg="today">Sleep</button>
+      <button class="ghost" data-cmd="2a" data-arg="today">SpO₂ log</button>
+      <button class="ghost" data-cmd="37" data-arg="today">Stress</button>
+      <button class="ghost" data-cmd="39" data-arg="today">HRV</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Ring</div>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="find">Flash the LED</button>
+      <button class="ghost" id="info">Firmware version</button>
+      <button class="ghost" id="settime">Re-sync clock</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span class="eyebrow">Log</span>
+      <div class="row">
+        <button class="ghost" id="copy" style="padding:7px 11px;font-size:12px">Copy</button>
+        <button class="ghost" id="clear" style="padding:7px 11px;font-size:12px">Clear</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+/* Protocol constants — public, from the Colmi R02/R03/R06 reverse-engineering work
+   (Gadgetbridge PR #3896, tahnok/colmi_r02_client, colmi.puxtril.com). */
+const SVC   = "6e40fff0-b5a3-f393-e0a9-e50e24dcca9e";
+const RX    = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // we write here
+const TX    = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // ring notifies here
+const DEVINFO = "0000180a-0000-1000-8000-00805f9b34fb";
+const FW      = "00002a26-0000-1000-8000-00805f9b34fb";
+const HW      = "00002a27-0000-1000-8000-00805f9b34fb";
+
+const CMD = {
+  SET_TIME: 0x01, BATTERY: 0x03, REBOOT: 0x08,
+  HR_LOG: 0x15, SPO2_LOG: 0x2a, STRESS: 0x37, HRV: 0x39,
+  STEPS: 0x43, SLEEP: 0x44, FIND: 0x50,
+  REALTIME_START: 0x69, REALTIME_STOP: 0x6a,
+};
+const READING = { HEART_RATE: 1, SPO2: 2 };
+
+const $ = (id) => document.getElementById(id);
+let device = null, rx = null, tx = null;
+const lines = [];
+const trace = [];
+
+/* ---------- packet helpers ---------- */
+
+// 16 bytes: [cmd][...payload...][checksum]. Checksum = sum of first 15 bytes mod 255.
+function packet(cmd, payload = []) {
+  const p = new Uint8Array(16);
+  p[0] = cmd;
+  payload.forEach((b, i) => { p[i + 1] = b & 0xff; });
+  let sum = 0;
+  for (let i = 0; i < 15; i++) sum += p[i];
+  p[15] = sum % 255;
+  return p;
+}
+
+const hex = (b) => Array.from(b).map(x => x.toString(16).padStart(2,"0").toUpperCase()).join(" ");
+// The ring stores date/time as BCD: decimal 24 is sent as byte 0x24.
+const bcd = (n) => parseInt(String(n % 100).padStart(2,"0"), 16);
+
+function log(kind, text){
+  const t = new Date().toTimeString().slice(0,8);
+  lines.push(`[${t}] ${text}`);
+  const d = document.createElement("div");
+  d.className = "le " + kind;
+  d.textContent = `${t}  ${text}`;
+  $("log").prepend(d);
+}
+
+function stat(text, cls){
+  $("stat").textContent = text;
+  $("dot").className = "dot" + (cls ? " " + cls : "");
+}
+
+async function send(cmd, payload = [], note = ""){
+  if (!rx) { log("err","Not connected"); return; }
+  const p = packet(cmd, payload);
+  try {
+    if (rx.properties.write) await rx.writeValueWithResponse(p);
+    else await rx.writeValueWithoutResponse(p);
+    log("out", `→ ${hex(p)}${note ? "   " + note : ""}`);
+  } catch(e){ log("err", "Write failed: " + e.message); }
+}
+
+/* ---------- environment check ---------- */
+(function(){
+  const w = $("warn");
+  if (!navigator.bluetooth){
+    w.classList.remove("hide");
+    w.innerHTML = "This browser can't use Bluetooth. Open this page in <b>Chrome on Android</b>.";
+    $("connect").disabled = true;
+  } else if (location.protocol !== "https:" && location.hostname !== "localhost"){
+    w.classList.remove("hide");
+    w.innerHTML = "Bluetooth needs <b>https</b>. Open the GitHub Pages link, not the local file.";
+    $("connect").disabled = true;
+  }
+})();
+
+/* ---------- connect ---------- */
+$("connect").onclick = async () => {
+  try {
+    stat("Pick your ring…", "busy");
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SVC] }],
+      optionalServices: [DEVINFO],
+    }).catch(async () => {
+      // Ring might advertise without the service UUID — fall back to showing everything.
+      log("sys","No ring advertising the Colmi service. Showing all devices…");
+      return navigator.bluetooth.requestDevice({
+        acceptAllDevices: true, optionalServices: [SVC, DEVINFO],
+      });
+    });
+
+    device.addEventListener("gattserverdisconnected", () => {
+      stat("Disconnected — the ring sleeps when still", "");
+      log("err","Ring disconnected");
+    });
+
+    stat("Connecting…","busy");
+    const server = await device.gatt.connect();
+    log("sys", `Connected to ${device.name || "(unnamed)"}`);
+
+    let svc;
+    try { svc = await server.getPrimaryService(SVC); }
+    catch(e){
+      stat("Connected — but not a Colmi-family ring","");
+      $("warn").classList.remove("hide");
+      $("warn").innerHTML = "This ring doesn't expose the Colmi service, so it speaks a " +
+        "different protocol. Use the Ring Explorer instead and send me its report.";
+      return;
+    }
+
+    rx = await svc.getCharacteristic(RX);
+    tx = await svc.getCharacteristic(TX);
+    await tx.startNotifications();
+    tx.addEventListener("characteristicvaluechanged", onPacket);
+
+    $("found").classList.remove("hide");
+    $("found").textContent = "Your ring is Colmi R02-family — the whole public protocol applies.";
+    $("app").classList.remove("hide");
+    $("connect").textContent = "Reconnect";
+    stat("Connected", "on");
+
+    // The ring timestamps everything it records, so the clock must be right or
+    // history comes back empty. This is the bug that stalled Gadgetbridge for weeks.
+    await setTime();
+    await new Promise(r => setTimeout(r, 300));
+    await send(CMD.BATTERY, [], "battery");
+  } catch(e){
+    stat("Not connected","");
+    log("err","Error: " + e.message);
+  }
+};
+
+async function setTime(){
+  const d = new Date();
+  await send(CMD.SET_TIME, [
+    bcd(d.getFullYear()), bcd(d.getMonth() + 1), bcd(d.getDate()),
+    bcd(d.getHours()), bcd(d.getMinutes()), bcd(d.getSeconds()),
+  ], "set clock " + d.toLocaleString());
+}
+
+/* ---------- incoming ---------- */
+function onPacket(ev){
+  const b = new Uint8Array(ev.target.value.buffer);
+  log("in", `← ${hex(b)}`);
+
+  switch (b[0]) {
+    case CMD.BATTERY:
+      $("batt").textContent = b[1] + "%";
+      log("sys", `Battery ${b[1]}%${b[2] === 1 ? " (charging)" : ""}`);
+      break;
+
+    case CMD.REALTIME_START: {
+      // Layout varies by firmware; b[3] carries the value on the builds documented so far.
+      const v = b[3] || b[2];
+      if (v > 25 && v < 220) {
+        $("hr").textContent = v;
+        trace.push(v);
+        if (trace.length > 60) trace.shift();
+        drawTrace();
+      } else if (b[1] === 0 || b[2] === 0) {
+        log("sys","Ring says: no reading yet. Keep still, ring snug.");
+      }
+      break;
+    }
+
+    default:
+      // Everything else is history — raw bytes are what we need to decode it.
+      break;
+  }
+}
+
+function drawTrace(){
+  if (trace.length < 2) return;
+  const min = Math.min(...trace), max = Math.max(...trace), span = (max - min) || 1;
+  const d = trace.map((v,i) =>
+    (i ? "L" : "M") + ((i/(trace.length-1))*300).toFixed(1) + " " +
+    (74 - ((v-min)/span)*68).toFixed(1)).join(" ");
+  $("tracePath").setAttribute("d", d);
+}
+
+/* ---------- controls ---------- */
+$("hrStart").onclick = async () => {
+  trace.length = 0;
+  await send(CMD.REALTIME_START, [READING.HEART_RATE, 0], "start live HR");
+  // Some firmwares stop after ~10s unless nudged, so keep it alive.
+  clearInterval(window.__keep);
+  window.__keep = setInterval(() =>
+    send(CMD.REALTIME_START, [READING.HEART_RATE, 3], "keepalive"), 8000);
+};
+
+$("hrStop").onclick = async () => {
+  clearInterval(window.__keep);
+  await send(CMD.REALTIME_STOP, [READING.HEART_RATE, 0, 0], "stop live");
+};
+
+$("spo2").onclick = async () => {
+  trace.length = 0;
+  await send(CMD.REALTIME_START, [READING.SPO2, 0], "start live SpO2");
+};
+
+document.querySelectorAll("[data-cmd]").forEach(b => {
+  b.onclick = () => {
+    const cmd = parseInt(b.dataset.cmd, 16);
+    const d = new Date();
+    // Most history requests take a day index: 0 = today.
+    send(cmd, [0], `request ${b.textContent} for ${d.toDateString()}`);
+  };
+});
+
+$("find").onclick = () => send(CMD.FIND, [0x55, 0, 0, 0, 0], "flash LED");
+$("settime").onclick = setTime;
+
+$("info").onclick = async () => {
+  try {
+    const svc = await device.gatt.getPrimaryService(DEVINFO);
+    for (const [uuid,label] of [[FW,"Firmware"],[HW,"Hardware"]]) {
+      const c = await svc.getCharacteristic(uuid);
+      const v = await c.readValue();
+      const s = new TextDecoder().decode(v);
+      log("in", `${label}: ${s}`);
+    }
+  } catch(e){ log("err","Couldn't read device info: " + e.message); }
+};
+
+$("clear").onclick = () => { $("log").innerHTML = ""; lines.length = 0; };
+$("copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(lines.slice().reverse().join("\n"));
+    $("copy").textContent = "Copied";
+    setTimeout(() => $("copy").textContent = "Copy", 1500);
+  } catch(e){ log("err","Clipboard blocked — select the log manually."); }
+};
+</script>
+</body>
+</html>
