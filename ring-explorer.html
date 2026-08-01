@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06110F">
+<title>Ring Explorer</title>
+<link rel="icon" href="data:,">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  --ground:#06110F; --surface:#0D1A19; --raised:#152525; --line:#213534;
+  --aqua:#5FE0C6; --iris:#8E9CFF; --ice:#7FC4FF; --text:#E6F2F0;
+  --muted:#6E8A88; --warn:#FFB86B; --bad:#FF7A85;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--ground);color:var(--text);
+  font-family:'Public Sans',system-ui,sans-serif;padding:20px 16px 60px;
+  max-width:640px;margin:0 auto;-webkit-font-smoothing:antialiased}
+h1{font-family:'Bricolage Grotesque',sans-serif;font-size:30px;font-weight:800;
+  letter-spacing:-.02em;margin:0 0 6px;line-height:1.1}
+h2{font-family:'Bricolage Grotesque',sans-serif;font-size:17px;font-weight:600;
+  margin:0 0 10px}
+.sub{color:var(--muted);font-size:14px;line-height:1.55;margin:0 0 22px}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+
+button{font-family:inherit;cursor:pointer;border:none;
+  transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s,opacity .2s}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:2px solid var(--aqua);outline-offset:3px}
+
+.primary{width:100%;padding:17px;border-radius:16px;background:var(--aqua);
+  color:var(--ground);font-size:16px;font-weight:600}
+.ghost{padding:10px 14px;border-radius:12px;background:transparent;
+  border:1px solid var(--line);color:var(--text);font-size:13px}
+.chip{padding:7px 12px;border-radius:10px;background:var(--raised);
+  border:1px solid var(--line);color:var(--aqua);font-size:12px;
+  font-family:'IBM Plex Mono',monospace}
+.chip.on{background:var(--aqua);color:var(--ground);border-color:var(--aqua)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  padding:16px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
+
+input{font-family:'IBM Plex Mono',monospace;background:var(--raised);
+  border:1px solid var(--line);color:var(--text);padding:12px 14px;
+  border-radius:12px;font-size:14px;width:100%}
+input:focus{outline:none;border-color:var(--aqua)}
+input::placeholder{color:var(--muted)}
+
+.svc{border-top:1px solid var(--line);padding:14px 0}
+.svc:first-of-type{border-top:none}
+.uuid{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);
+  word-break:break-all;margin-top:2px}
+.name{font-size:14.5px;font-weight:600;color:var(--text)}
+.chr{background:var(--raised);border-radius:12px;padding:12px;margin-top:8px}
+.props{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.prop{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.06em;
+  padding:3px 7px;border-radius:6px;background:var(--ground);color:var(--muted)}
+.prop.n{color:var(--iris)} .prop.w{color:var(--warn)} .prop.r{color:var(--ice)}
+
+#log{background:#030A09;border:1px solid var(--line);border-radius:14px;
+  padding:12px;max-height:340px;overflow-y:auto;font-family:'IBM Plex Mono',monospace;
+  font-size:11.5px;line-height:1.65}
+.le{display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(33,53,52,.4)}
+.le time{color:var(--muted);flex-shrink:0}
+.le span{word-break:break-all}
+.i-in{color:var(--aqua)} .i-out{color:var(--warn)} .i-sys{color:var(--muted)}
+.i-err{color:var(--bad)}
+
+.status{display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:16px}
+.dot{width:9px;height:9px;border-radius:9px;background:var(--muted)}
+.dot.on{background:var(--aqua)}
+.warnbox{background:var(--raised);border:1px solid var(--warn);border-radius:14px;
+  padding:14px;font-size:13.5px;line-height:1.55;color:var(--warn);margin-bottom:16px}
+.hide{display:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<h1>Ring Explorer</h1>
+<p class="sub">Connects to your Pi Ring and maps everything it exposes: services, channels, live data, and what it answers when you send it commands. Run this in Chrome on Android.</p>
+
+<div id="unsupported" class="warnbox hide"></div>
+
+<div class="status">
+  <span class="dot" id="dot"></span>
+  <span id="statusText">Not connected</span>
+</div>
+
+<button class="primary" id="scanBtn">Scan for ring</button>
+
+<div id="main" class="hide">
+
+  <div class="card" style="margin-top:16px">
+    <div class="eyebrow">Device</div>
+    <div class="name" id="devName">—</div>
+    <div class="uuid" id="devId">—</div>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="disconnectBtn">Disconnect</button>
+      <button class="ghost" id="copyBtn">Copy full report</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Services &amp; channels</div>
+    <div id="services"></div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Send a command</div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 12px">
+      Write raw bytes to a channel. Type hex, spaces optional. Pick a channel above first.
+    </p>
+    <div id="writeTarget" class="uuid" style="margin-bottom:10px">No channel selected</div>
+    <input id="hexInput" placeholder="01 00 00 00" autocomplete="off" spellcheck="false">
+    <div class="row" style="margin-top:10px">
+      <button class="chip" data-hex="01 00 00 00">01 00 00 00</button>
+      <button class="chip" data-hex="BC 00 00 00">BC 00 00 00</button>
+      <button class="chip" data-hex="A1 00">A1 00</button>
+      <button class="chip" data-hex="03">03</button>
+    </div>
+    <button class="primary" id="sendBtn" style="margin-top:12px" disabled>Send bytes</button>
+  </div>
+
+  <div class="card">
+    <div class="spread" style="margin-bottom:10px">
+      <div class="eyebrow" style="margin:0">Live log</div>
+      <button class="ghost" id="clearBtn">Clear</button>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+/* ---------- known UUID names, so the output is readable ---------- */
+const NAMES = {
+  "00001800":"Generic Access","00001801":"Generic Attribute","0000180a":"Device Information",
+  "0000180d":"Heart Rate","0000180f":"Battery","00001810":"Blood Pressure",
+  "00001812":"HID","00001814":"Running Speed","00001816":"Cycling Speed",
+  "0000181a":"Environmental Sensing","0000181c":"User Data","0000181d":"Weight Scale",
+  "00001822":"Pulse Oximeter","00001826":"Fitness Machine",
+  "00002a19":"Battery Level","00002a37":"Heart Rate Measurement","00002a29":"Manufacturer",
+  "00002a24":"Model Number","00002a26":"Firmware Revision","00002a27":"Hardware Revision",
+  "00002a28":"Software Revision","00002a25":"Serial Number","00002a00":"Device Name",
+  "00006e40":"Nordic UART","0000fee7":"Tencent / common ring service",
+  "0000fff0":"Vendor FFF0 (common on rings)","0000ffe0":"Vendor FFE0",
+  "0000fee0":"Vendor FEE0","0000fe59":"Nordic DFU (firmware update)",
+};
+
+/* ---------- Web Bluetooth needs services declared up front ---------- */
+function buildOptionalServices(){
+  const list = [
+    "6e400001-b5a3-f393-e0a9-e50e24dcca9e", // Nordic UART
+    "0000fee7-0000-1000-8000-00805f9b34fb",
+    "0000fff0-0000-1000-8000-00805f9b34fb",
+    "0000ffe0-0000-1000-8000-00805f9b34fb",
+    "de5bf728-d711-4e47-af26-65e3012a5dc7", // seen on some ODM rings
+    "0000fe59-0000-1000-8000-00805f9b34fb",
+  ];
+  const push = (n) => list.push("0000" + n.toString(16).padStart(4,"0") + "-0000-1000-8000-00805f9b34fb");
+  for (let i = 0x1800; i <= 0x18ff; i++) push(i);
+  for (let i = 0xfe00; i <= 0xfeff; i++) push(i);
+  for (let i = 0xff00; i <= 0xffff; i++) push(i);
+  return list;
+}
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const hex = (dv) => Array.from(new Uint8Array(dv.buffer ?? dv))
+  .map(b => b.toString(16).padStart(2,"0").toUpperCase()).join(" ");
+const ascii = (dv) => Array.from(new Uint8Array(dv.buffer ?? dv))
+  .map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : ".").join("");
+const label = (uuid) => NAMES[uuid.slice(0,8)] || null;
+
+let device = null, server = null, writeChar = null;
+const logLines = [];
+let report = [];
+
+function log(kind, text){
+  const t = new Date().toTimeString().slice(0,8);
+  logLines.push(`[${t}] ${text}`);
+  const el = document.createElement("div");
+  el.className = "le";
+  el.innerHTML = `<time>${t}</time><span class="i-${kind}">${text.replace(/</g,"&lt;")}</span>`;
+  $("log").prepend(el);
+}
+
+function setStatus(text, on){
+  $("statusText").textContent = text;
+  $("dot").className = "dot" + (on ? " on" : "");
+}
+
+/* ---------- support check ---------- */
+(function check(){
+  const box = $("unsupported");
+  if (!navigator.bluetooth) {
+    box.classList.remove("hide");
+    box.innerHTML = "This browser can't use Bluetooth. Open this page in <b>Chrome on Android</b>. " +
+      "iPhone browsers and Firefox don't support Web Bluetooth at all.";
+    $("scanBtn").disabled = true;
+  } else if (location.protocol !== "https:" && location.hostname !== "localhost") {
+    box.classList.remove("hide");
+    box.innerHTML = "Bluetooth only works over <b>https</b>. Host this file on GitHub Pages and open the https link.";
+    $("scanBtn").disabled = true;
+  }
+})();
+
+/* ---------- scan and map ---------- */
+$("scanBtn").onclick = async () => {
+  try {
+    setStatus("Choose your ring from the list…", false);
+    log("sys", "Requesting device…");
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: buildOptionalServices(),
+    });
+
+    device.addEventListener("gattserverdisconnected", () => {
+      setStatus("Disconnected", false);
+      log("err", "Ring disconnected");
+    });
+
+    log("sys", `Selected: ${device.name || "(no name)"} · ${device.id}`);
+    setStatus("Connecting…", false);
+    server = await device.gatt.connect();
+    setStatus("Connected", true);
+    log("sys", "GATT connected. Reading services…");
+
+    $("devName").textContent = device.name || "(unnamed device)";
+    $("devId").textContent = device.id;
+    $("main").classList.remove("hide");
+    $("scanBtn").textContent = "Scan again";
+
+    await mapServices();
+  } catch (e) {
+    setStatus("Not connected", false);
+    log("err", "Error: " + e.message);
+  }
+};
+
+async function mapServices(){
+  const wrap = $("services");
+  wrap.innerHTML = "";
+  report = [`Device: ${device.name || "(unnamed)"}`, `ID: ${device.id}`, ""];
+
+  let services = [];
+  try {
+    services = await server.getPrimaryServices();
+  } catch (e) {
+    log("err", "Couldn't list services: " + e.message);
+    return;
+  }
+  log("sys", `Found ${services.length} service(s)`);
+
+  for (const svc of services) {
+    const sName = label(svc.uuid);
+    const sDiv = document.createElement("div");
+    sDiv.className = "svc";
+    sDiv.innerHTML = `<div class="name">${sName || "Unknown service"}</div>
+                      <div class="uuid">${svc.uuid}</div>`;
+    report.push(`SERVICE ${svc.uuid}${sName ? "  (" + sName + ")" : ""}`);
+
+    let chars = [];
+    try { chars = await svc.getCharacteristics(); }
+    catch (e) { log("err", `No characteristics on ${svc.uuid}`); }
+
+    for (const ch of chars) {
+      const p = ch.properties;
+      const flags = [];
+      if (p.read) flags.push(["READ","r"]);
+      if (p.write) flags.push(["WRITE","w"]);
+      if (p.writeWithoutResponse) flags.push(["WRITE-NR","w"]);
+      if (p.notify) flags.push(["NOTIFY","n"]);
+      if (p.indicate) flags.push(["INDICATE","n"]);
+
+      report.push(`  CHAR ${ch.uuid}  [${flags.map(f=>f[0]).join(", ")}]`);
+
+      const cDiv = document.createElement("div");
+      cDiv.className = "chr";
+      cDiv.innerHTML =
+        `<div class="uuid" style="color:var(--text);font-size:12px">${ch.uuid}</div>
+         ${label(ch.uuid) ? `<div style="font-size:12px;color:var(--aqua);margin-top:3px">${label(ch.uuid)}</div>` : ""}
+         <div class="props">${flags.map(f=>`<span class="prop ${f[1]}">${f[0]}</span>`).join("")}</div>
+         <div class="row" style="margin-top:10px"></div>`;
+      const btnRow = cDiv.querySelector(".row");
+
+      if (p.read) {
+        const b = document.createElement("button");
+        b.className = "ghost"; b.textContent = "Read";
+        b.onclick = async () => {
+          try {
+            const v = await ch.readValue();
+            const line = `READ ${ch.uuid.slice(4,8)} → ${hex(v)}  "${ascii(v)}"`;
+            log("in", line); report.push("    " + line);
+          } catch (e) { log("err", "Read failed: " + e.message); }
+        };
+        btnRow.appendChild(b);
+      }
+
+      if (p.notify || p.indicate) {
+        const b = document.createElement("button");
+        b.className = "chip"; b.textContent = "Listen";
+        let on = false;
+        b.onclick = async () => {
+          try {
+            if (!on) {
+              await ch.startNotifications();
+              ch.addEventListener("characteristicvaluechanged", (ev) => {
+                const v = ev.target.value;
+                log("in", `${ch.uuid.slice(4,8)} ← ${hex(v)}  "${ascii(v)}"`);
+              });
+              on = true; b.classList.add("on"); b.textContent = "Listening";
+              log("sys", `Listening on ${ch.uuid}`);
+            } else {
+              await ch.stopNotifications();
+              on = false; b.classList.remove("on"); b.textContent = "Listen";
+            }
+          } catch (e) { log("err", "Notify failed: " + e.message); }
+        };
+        btnRow.appendChild(b);
+      }
+
+      if (p.write || p.writeWithoutResponse) {
+        const b = document.createElement("button");
+        b.className = "ghost"; b.textContent = "Use for sending";
+        b.onclick = () => {
+          writeChar = ch;
+          $("writeTarget").textContent = "Sending to " + ch.uuid;
+          $("sendBtn").disabled = false;
+          log("sys", `Send channel set to ${ch.uuid}`);
+        };
+        btnRow.appendChild(b);
+      }
+
+      sDiv.appendChild(cDiv);
+    }
+    report.push("");
+    wrap.appendChild(sDiv);
+  }
+  log("sys", "Mapping complete. Tap Listen on the NOTIFY channels, then send a command.");
+}
+
+/* ---------- sending ---------- */
+document.querySelectorAll(".chip[data-hex]").forEach(b => {
+  b.onclick = () => { $("hexInput").value = b.dataset.hex; };
+});
+
+$("sendBtn").onclick = async () => {
+  if (!writeChar) return;
+  const raw = $("hexInput").value.replace(/[^0-9a-fA-F]/g, "");
+  if (raw.length < 2 || raw.length % 2) { log("err", "Hex must be whole bytes, e.g. 01 00"); return; }
+  const bytes = new Uint8Array(raw.match(/../g).map(h => parseInt(h,16)));
+  try {
+    if (writeChar.properties.write) await writeChar.writeValueWithResponse(bytes);
+    else await writeChar.writeValueWithoutResponse(bytes);
+    const line = `SENT → ${hex(bytes)}`;
+    log("out", line); report.push("    " + line);
+  } catch (e) { log("err", "Send failed: " + e.message); }
+};
+
+$("disconnectBtn").onclick = () => {
+  if (device?.gatt.connected) device.gatt.disconnect();
+  setStatus("Disconnected", false);
+};
+
+$("clearBtn").onclick = () => { $("log").innerHTML = ""; logLines.length = 0; };
+
+$("copyBtn").onclick = async () => {
+  const text = report.join("\n") + "\n\n--- LOG ---\n" + logLines.slice().reverse().join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    $("copyBtn").textContent = "Copied";
+    setTimeout(() => $("copyBtn").textContent = "Copy full report", 1600);
+  } catch (e) {
+    log("err", "Clipboard blocked — long-press the log to select instead.");
+  }
+};
+</script>
+</body>
+</html>
